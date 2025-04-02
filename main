@@ -1,0 +1,47 @@
+from flask import Flask, jsonify, render_template_string
+import RPi.GPIO as GPIO
+import time
+
+app = Flask(__name__)
+
+# GPIO stillingar fyrir ultrasonic skynjara
+TRIG, ECHO = 23, 24
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(TRIG, GPIO.OUT)
+GPIO.setup(ECHO, GPIO.IN)
+
+# Fall sem mælir fjarlægð í cm
+def get_distance():
+    GPIO.output(TRIG, True)
+    time.sleep(0.00001)
+    GPIO.output(TRIG, False)
+
+    while GPIO.input(ECHO) == 0:
+        start = time.time()
+    while GPIO.input(ECHO) == 1:
+        end = time.time()
+
+    return round((end - start) * 17150, 2)
+
+# Fall sem reiknar lítra út frá fjarlægð
+def calculate_liters(distance):
+    max_height = 100  # cm
+    return round(max(0, (1 - distance / max_height)) * 100, 1)
+
+# Vefsíða (ultra stutt útgáfa)
+@app.route('/')
+def index():
+    return render_template_string('<h1>📏 <span id=d>...</span></h1><h2>💧 <span id=l>...</span></h2><script>setInterval(()=>fetch("/data").then(r=>r.json()).then(g=>{d.innerText=g.distance+" cm";l.innerText=g.liters+" lítrar"}),1000)</script>')
+
+# JSON gögn fyrir JavaScript
+@app.route('/data')
+def data():
+    d = get_distance()
+    return jsonify({'distance': d, 'liters': calculate_liters(d)})
+
+# Keyrir vefinn og lokar GPIO við lok
+if __name__ == '__main__':
+    try:
+        app.run(host='0.0.0.0', port=5000)
+    finally:
+        GPIO.cleanup()
